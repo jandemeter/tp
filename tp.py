@@ -1,0 +1,187 @@
+import joblib
+import pandas as pd
+import numpy as np
+from fastapi import FastAPI, UploadFile, File
+from fastapi.responses import JSONResponse
+from io import BytesIO
+import math
+
+# Načítanie FastAPI a ďalších knižníc
+app = FastAPI()
+
+# Načítanie modelu
+model = joblib.load('optimized_xgb_model.pkl')
+
+def calculate_angle(diff_x, diff_y):
+    angle_radians = math.atan2(diff_x, diff_y)
+    angle_degrees = math.degrees(angle_radians)
+    if angle_degrees < 0:
+        angle_degrees += 360
+    return angle_degrees
+
+def calculate_tms(x1, y1, x2, y2, time1, time2):
+    distance = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+    time_diff = time2 - time1
+    if time_diff > 0:
+        return distance / time_diff
+    else:
+        return np.nan
+
+def process_files(touch_df, accelerometer_df, gyroscope_df):
+    touch_df = touch_df.drop(columns=["event_type_detail", "pointer_id", "raw_x", "raw_y", "touch_major", "touch_minor"], errors='ignore')
+    touch_df = touch_df.rename(columns={
+        "event_type": "touch_event_type",
+        "x": "touch_x",
+        "y": "touch_y",
+        "pressure": "touch_pressure",
+        "size": "touch_size"
+    })
+    accelerometer_df = accelerometer_df.rename(columns={"x": "accelerometer_x", "y": "accelerometer_y", "z": "accelerometer_z"})
+    gyroscope_df = gyroscope_df.rename(columns={"x": "gyroscope_x", "y": "gyroscope_y", "z": "gyroscope_z"})
+
+    merged_df = touch_df.merge(accelerometer_df, on=["timestamp", "vzor_id"], how="left")
+    merged_df = merged_df.merge(gyroscope_df, on=["timestamp", "vzor_id"], how="left")
+
+    processed_data = []
+    current_touch = None
+
+    for _, row in merged_df.iterrows():
+        if row['touch_event_type'] == 'down':
+            current_touch = row
+        elif row['touch_event_type'] in ['move', 'up'] and current_touch is not None:
+            diff_x = row['touch_x'] - current_touch['touch_x']
+            diff_y = row['touch_y'] - current_touch['touch_y']
+
+            if diff_x == 0 and diff_y == 0 and row['touch_event_type'] == 'move':
+                continue
+
+            angle = calculate_angle(diff_x, diff_y)
+            tms = calculate_tms(current_touch['touch_x'], current_touch['touch_y'], row['touch_x'], row['touch_y'], current_touch['timestamp'], row['timestamp'])
+
+            if np.isnan(angle):
+                direction = np.nan
+            else:
+                if 0 <= angle < 45:
+                    direction = 1
+                elif 45 <= angle < 90:
+                    direction = 2
+                elif 90 <= angle < 135:
+                    direction = 3
+                elif 135 <= angle < 180:
+                    direction = 4
+                elif 180 <= angle < 225:
+                    direction = 5
+                elif 225 <= angle < 270:
+                    direction = 6
+                elif 270 <= angle < 315:
+                    direction = 7
+                else:
+                    direction = 8
+
+            processed_row = {
+                "userid": row.get("userid", np.nan),
+                "timestamp": row["timestamp"],
+                "touch_event_type": row["touch_event_type"],
+                "touch_x": row["touch_x"],
+                "touch_y": row["touch_y"],
+                "touch_pressure": row["touch_pressure"],
+                "touch_size": row["touch_size"],
+                "accelerometer_x": row["accelerometer_x"],
+                "accelerometer_y": row["accelerometer_y"],
+                "accelerometer_z": row["accelerometer_z"],
+                "gyroscope_x": row["gyroscope_x"],
+                "gyroscope_y": row["gyroscope_y"],
+                "gyroscope_z": row["gyroscope_z"],
+                "direction": direction,
+                "angle": angle,
+                "TMS": tms
+            }
+
+            processed_data.append(processed_row)
+            current_touch = row
+
+    processed_df = pd.DataFrame(processed_data)
+    return processed_df
+
+def create_features(df):
+    data = []
+
+    for _, user_data in df.groupby('userid'):
+        movement_data = None
+        direction_data = {i: [] for i in range(1, 9)}
+        length_data = {i: 0 for i in range(1, 9)}
+        acceleration_x = {i: [] for i in range(1, 9)}
+        acceleration_y = {i: [] for i in range(1, 9)}
+        acceleration_z = {i: [] for i in range(1, 9)}
+        total_acceleration = {i: [] for i in range(1, 9)}
+        gyro_x = {i: [] for i in range(1, 9)}
+        gyro_y = {i: [] for i in range(1, 9)}
+        gyro_z = {i: [] for i in range(1, 9)}
+        total_gyro = {i: [] for i in range(1, 9)}
+
+        prev_x, prev_y = None, None
+
+        for _, row in user_data.iterrows():
+            if row["touch_event_type"] == "down":
+                movement_data = {"userid": row["userid"]}
+                prev_x, prev_y = row["touch_x"], row["touch_y"]
+            elif row["touch_event_type"] == "move" and movement_data:
+                direction = row["direction"]
+                if direction in range(1, 9):
+                    direction_data[direction].append(row["TMS"])
+                    if prev_x is not None and prev_y is not None:
+                        length_data[direction] += np.sqrt((row["touch_x"] - prev_x)**2 + (row["touch_y"] - prev_y)**2)
+                    acceleration_x[direction].append(row["accelerometer_x"])
+                    acceleration_y[direction].append(row["accelerometer_y"])
+                    acceleration_z[direction].append(row["accelerometer_z"])
+                    total_acceleration[direction].append(np.sqrt(row["accelerometer_x"]**2 + row["accelerometer_y"]**2 + row["accelerometer_z"]**2))
+                    gyro_x[direction].append(row["gyroscope_x"])
+                    gyro_y[direction].append(row["gyroscope_y"])
+                    gyro_z[direction].append(row["gyroscope_z"])
+                    total_gyro[direction].append(np.sqrt(row["gyroscope_x"]**2 + row["gyroscope_y"]**2 + row["gyroscope_z"]**2))
+                    prev_x, prev_y = row["touch_x"], row["touch_y"]
+            elif row["touch_event_type"] == "up" and movement_data:
+                for d in range(1, 9):
+                    movement_data[f"ATMS_{d}"] = np.nanmean(direction_data[d]) if direction_data[d] else np.nan
+                    movement_data[f"max_TMS_{d}"] = np.nanmax(direction_data[d]) if direction_data[d] else np.nan
+                    movement_data[f"min_TMS_{d}"] = np.nanmin(direction_data[d]) if direction_data[d] else np.nan
+                    movement_data[f"length_{d}"] = length_data[d] if length_data[d] > 0 else np.nan
+                    movement_data[f"accel_x_{d}"] = np.nanmean(acceleration_x[d]) if acceleration_x[d] else np.nan
+                    movement_data[f"accel_y_{d}"] = np.nanmean(acceleration_y[d]) if acceleration_y[d] else np.nan
+                    movement_data[f"accel_z_{d}"] = np.nanmean(acceleration_z[d]) if acceleration_z[d] else np.nan
+                    movement_data[f"total_accel_{d}"] = np.nanmean(total_acceleration[d]) if total_acceleration[d] else np.nan
+                    movement_data[f"gyro_x_{d}"] = np.nanmean(gyro_x[d]) if gyro_x[d] else np.nan
+                    movement_data[f"gyro_y_{d}"] = np.nanmean(gyro_y[d]) if gyro_y[d] else np.nan
+                    movement_data[f"gyro_z_{d}"] = np.nanmean(gyro_z[d]) if gyro_z[d] else np.nan
+                    movement_data[f"total_gyro_{d}"] = np.nanmean(total_gyro[d]) if total_gyro[d] else np.nan
+                data.append(movement_data)
+                movement_data = None
+
+    return pd.DataFrame(data)
+
+@app.post("/process/")
+async def process_data(
+    touch: UploadFile = File(...),
+    accelerometer: UploadFile = File(...),
+    gyroscope: UploadFile = File(...)
+):
+    try:
+        # Načítanie CSV dát
+        touch_df = pd.read_csv(BytesIO(await touch.read()))
+        accelerometer_df = pd.read_csv(BytesIO(await accelerometer.read()))
+        gyroscope_df = pd.read_csv(BytesIO(await gyroscope.read()))
+
+        # Predspracovanie dát
+        processed_df = process_files(touch_df, accelerometer_df, gyroscope_df)
+        final_features_df = create_features(processed_df)
+
+        # Predikcia
+        features = final_features_df.drop(columns=['userid', 'timestamp'], errors='ignore')
+        predictions = model.predict(features)
+
+        # Pridanie predikcií do výsledného datasetu
+        final_features_df['prediction'] = predictions
+
+        return JSONResponse(content=final_features_df.to_dict(orient="records"))
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
