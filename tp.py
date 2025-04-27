@@ -49,6 +49,26 @@ def process_files(touch_df, accelerometer_df, gyroscope_df):
     for _, row in merged_df.iterrows():
         if row['touch_event_type'] == 'down':
             current_touch = row
+            # pridaj aj down event do processed_data
+            processed_row = {
+                "userid": row.get("userid", np.nan),
+                "timestamp": row["timestamp"],
+                "touch_event_type": row["touch_event_type"],
+                "touch_x": row["touch_x"],
+                "touch_y": row["touch_y"],
+                "touch_pressure": row["touch_pressure"],
+                "touch_size": row["touch_size"],
+                "accelerometer_x": row["accelerometer_x"],
+                "accelerometer_y": row["accelerometer_y"],
+                "accelerometer_z": row["accelerometer_z"],
+                "gyroscope_x": row["gyroscope_x"],
+                "gyroscope_y": row["gyroscope_y"],
+                "gyroscope_z": row["gyroscope_z"],
+                "direction": np.nan,
+                "angle": np.nan,
+                "TMS": np.nan
+            }
+            processed_data.append(processed_row)            
         elif row['touch_event_type'] in ['move', 'up'] and current_touch is not None:
             diff_x = row['touch_x'] - current_touch['touch_x']
             diff_y = row['touch_y'] - current_touch['touch_y']
@@ -102,6 +122,10 @@ def process_files(touch_df, accelerometer_df, gyroscope_df):
             current_touch = row
 
     processed_df = pd.DataFrame(processed_data)
+
+    if not processed_df.empty:
+        processed_df['userid'] = processed_df['userid'].fillna('1')
+
     return processed_df
 
 def create_features(df):
@@ -141,30 +165,70 @@ def create_features(df):
                     gyro_z[direction].append(row["gyroscope_z"])
                     total_gyro[direction].append(np.sqrt(row["gyroscope_x"]**2 + row["gyroscope_y"]**2 + row["gyroscope_z"]**2))
                     prev_x, prev_y = row["touch_x"], row["touch_y"]
+            # koniec pohybu
             elif row["touch_event_type"] == "up" and movement_data:
-                for d in range(1, 9):
-                    movement_data[f"ATMS_{d}"] = np.nanmean(direction_data[d]) if direction_data[d] else np.nan
-                    movement_data[f"max_TMS_{d}"] = np.nanmax(direction_data[d]) if direction_data[d] else np.nan
-                    movement_data[f"min_TMS_{d}"] = np.nanmin(direction_data[d]) if direction_data[d] else np.nan
-                    movement_data[f"length_{d}"] = length_data[d] if length_data[d] > 0 else np.nan
-                    movement_data[f"accel_x_{d}"] = np.nanmean(acceleration_x[d]) if acceleration_x[d] else np.nan
-                    movement_data[f"accel_y_{d}"] = np.nanmean(acceleration_y[d]) if acceleration_y[d] else np.nan
-                    movement_data[f"accel_z_{d}"] = np.nanmean(acceleration_z[d]) if acceleration_z[d] else np.nan
-                    movement_data[f"total_accel_{d}"] = np.nanmean(total_acceleration[d]) if total_acceleration[d] else np.nan
-                    movement_data[f"gyro_x_{d}"] = np.nanmean(gyro_x[d]) if gyro_x[d] else np.nan
-                    movement_data[f"gyro_y_{d}"] = np.nanmean(gyro_y[d]) if gyro_y[d] else np.nan
-                    movement_data[f"gyro_z_{d}"] = np.nanmean(gyro_z[d]) if gyro_z[d] else np.nan
-                    movement_data[f"total_gyro_{d}"] = np.nanmean(total_gyro[d]) if total_gyro[d] else np.nan
+                for direction in range(1, 9):
+                    movement_data[f"ATMS_{direction}"] = round(np.mean(direction_data[direction]), 6) if direction_data[direction] else np.nan
+                    movement_data[f"max_TMS_{direction}"] = round(np.max(direction_data[direction]), 6) if direction_data[direction] else np.nan
+                    movement_data[f"min_TMS_{direction}"] = round(np.min(direction_data[direction]), 6) if direction_data[direction] else np.nan
+                    movement_data[f"length_{direction}"] = round(length_data[direction], 6) if length_data[direction] > 0 else np.nan
+                    movement_data[f"accel_x_{direction}"] = round(np.mean(acceleration_x[direction]), 6) if acceleration_x[direction] else np.nan
+                    movement_data[f"accel_y_{direction}"] = round(np.mean(acceleration_y[direction]), 6) if acceleration_y[direction] else np.nan
+                    movement_data[f"accel_z_{direction}"] = round(np.mean(acceleration_z[direction]), 6) if acceleration_z[direction] else np.nan
+                    movement_data[f"max_accel_x_{direction}"] = round(np.max(acceleration_x[direction]), 6) if acceleration_x[direction] else np.nan
+                    movement_data[f"min_accel_x_{direction}"] = round(np.min(acceleration_x[direction]), 6) if acceleration_x[direction] else np.nan
+                    movement_data[f"max_accel_y_{direction}"] = round(np.max(acceleration_y[direction]), 6) if acceleration_y[direction] else np.nan
+                    movement_data[f"min_accel_y_{direction}"] = round(np.min(acceleration_y[direction]), 6) if acceleration_y[direction] else np.nan
+                    movement_data[f"max_accel_z_{direction}"] = round(np.max(acceleration_z[direction]), 6) if acceleration_z[direction] else np.nan
+                    movement_data[f"min_accel_z_{direction}"] = round(np.min(acceleration_z[direction]), 6) if acceleration_z[direction] else np.nan
+                    movement_data[f"total_accel_{direction}"] = round(np.mean(total_acceleration[direction]), 6) if total_acceleration[direction] else np.nan
+                    movement_data[f"gyro_x_{direction}"] = round(np.mean(gyro_x[direction]), 6) if gyro_x[direction] else np.nan
+                    movement_data[f"gyro_y_{direction}"] = round(np.mean(gyro_y[direction]), 6) if gyro_y[direction] else np.nan
+                    movement_data[f"gyro_z_{direction}"] = round(np.mean(gyro_z[direction]), 6) if gyro_z[direction] else np.nan
+                    movement_data[f"max_gyro_x_{direction}"] = round(np.max(gyro_x[direction]), 6) if gyro_x[direction] else np.nan
+                    movement_data[f"min_gyro_x_{direction}"] = round(np.min(gyro_x[direction]), 6) if gyro_x[direction] else np.nan
+                    movement_data[f"max_gyro_y_{direction}"] = round(np.max(gyro_y[direction]), 6) if gyro_y[direction] else np.nan
+                    movement_data[f"min_gyro_y_{direction}"] = round(np.min(gyro_y[direction]), 6) if gyro_y[direction] else np.nan
+                    movement_data[f"max_gyro_z_{direction}"] = round(np.max(gyro_z[direction]), 6) if gyro_z[direction] else np.nan
+                    movement_data[f"min_gyro_z_{direction}"] = round(np.min(gyro_z[direction]), 6) if gyro_z[direction] else np.nan
+                    movement_data[f"total_gyro_{direction}"] = round(np.mean(total_gyro[direction]), 6) if total_gyro[direction] else np.nan
                 data.append(movement_data)
                 movement_data = None
 
-    return pd.DataFrame(data)
+    df_out = pd.DataFrame(data)
+    columns_order = ["userid"] + \
+                    [f"ATMS_{i}" for i in range(1, 9)] + \
+                    [f"max_TMS_{i}" for i in range(1, 9)] + \
+                    [f"min_TMS_{i}" for i in range(1, 9)] + \
+                    [f"length_{i}" for i in range(1, 9)] + \
+                    [f"accel_x_{i}" for i in range(1, 9)] + \
+                    [f"accel_y_{i}" for i in range(1, 9)] + \
+                    [f"accel_z_{i}" for i in range(1, 9)] + \
+                    [f"max_accel_x_{i}" for i in range(1, 9)] + \
+                    [f"min_accel_x_{i}" for i in range(1, 9)] + \
+                    [f"max_accel_y_{i}" for i in range(1, 9)] + \
+                    [f"min_accel_y_{i}" for i in range(1, 9)] + \
+                    [f"max_accel_z_{i}" for i in range(1, 9)] + \
+                    [f"min_accel_z_{i}" for i in range(1, 9)] + \
+                    [f"total_accel_{i}" for i in range(1, 9)] + \
+                    [f"gyro_x_{i}" for i in range(1, 9)] + \
+                    [f"gyro_y_{i}" for i in range(1, 9)] + \
+                    [f"gyro_z_{i}" for i in range(1, 9)] + \
+                    [f"max_gyro_x_{i}" for i in range(1, 9)] + \
+                    [f"min_gyro_x_{i}" for i in range(1, 9)] + \
+                    [f"max_gyro_y_{i}" for i in range(1, 9)] + \
+                    [f"min_gyro_y_{i}" for i in range(1, 9)] + \
+                    [f"max_gyro_z_{i}" for i in range(1, 9)] + \
+                    [f"min_gyro_z_{i}" for i in range(1, 9)] + \
+                    [f"total_gyro_{i}" for i in range(1, 9)]
+
+    return df_out[columns_order]
 
 @app.post("/process/")
 async def process_data(
     touch: UploadFile = File(...),
     accelerometer: UploadFile = File(...),
-    gyroscope: UploadFile = File(...)
+    gyroscope: UploadFile = File(...),
 ):
     try:
         # Načítanie CSV dát
@@ -172,17 +236,49 @@ async def process_data(
         accelerometer_df = pd.read_csv(BytesIO(await accelerometer.read()))
         gyroscope_df = pd.read_csv(BytesIO(await gyroscope.read()))
 
+        # Debugging: Print the dataframes
+        print("Touch DataFrame:")
+        print(touch_df.head())
+        print("Accelerometer DataFrame:")
+        print(accelerometer_df.head())
+        print("Gyroscope DataFrame:")
+        print(gyroscope_df.head())
+
         # Predspracovanie dát
         processed_df = process_files(touch_df, accelerometer_df, gyroscope_df)
+        print("Processed DataFrame:")
+        print(processed_df.head())
+
         final_features_df = create_features(processed_df)
+        print("Final Features DataFrame:")
+        print(final_features_df.head())
+
+        # Check if the DataFrame is empty
+        if final_features_df.empty:
+            raise ValueError("The features DataFrame is empty!")
+
+       # Remove the columns `userid` and `timestamp`
+        print("Columns in final_features_df:", final_features_df.columns)
+        features = final_features_df.drop(columns=['userid', 'timestamp'], errors='ignore')
+
+        # Debugging: Print the shape of the features DataFrame
+        print("Features DataFrame shape:", features.shape)
+
+        if features.empty:
+            raise ValueError("The features DataFrame is empty after dropping 'userid' and 'timestamp'!")
 
         # Predikcia
-        features = final_features_df.drop(columns=['userid', 'timestamp'], errors='ignore')
         predictions = model.predict(features)
 
         # Pridanie predikcií do výsledného datasetu
         final_features_df['prediction'] = predictions
 
+        # ===>>> PRIDÁŠ TOTO tu: <<===
+        final_features_df = final_features_df.replace([np.inf, -np.inf], np.nan)
+        final_features_df = final_features_df.fillna(0)
+
+        # Return ako JSON
         return JSONResponse(content=final_features_df.to_dict(orient="records"))
+
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
