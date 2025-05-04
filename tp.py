@@ -11,6 +11,7 @@ app = FastAPI()
 
 # Načítanie modelu
 model = joblib.load('multiclass_model.pkl')
+label_encoder = joblib.load('label_encoder.pkl') 
 
 def calculate_angle(diff_x, diff_y):
     angle_radians = math.atan2(diff_x, diff_y)
@@ -276,6 +277,9 @@ async def process_data(
         # Predikcia
         predictions = model.predict(features)
 
+        decoded_userid = label_encoder.inverse_transform(predictions)
+
+
         # Pridanie predikcií do výsledného datasetu
         final_features_df['prediction'] = predictions
 
@@ -284,7 +288,8 @@ async def process_data(
         final_features_df = final_features_df.fillna(0)
 
         # Return ako JSON
-        return JSONResponse(content=final_features_df.to_dict(orient="records"))
-
+        #return JSONResponse(content=final_features_df.to_dict(orient="records"))
+        return JSONResponse(content={"predictions": decoded_userid.tolist()})
+    
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
