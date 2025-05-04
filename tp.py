@@ -291,10 +291,17 @@ async def process_data(
         #return JSONResponse(content=final_features_df.to_dict(orient="records"))
 
         # Porovnáme decoded_userid s first_userid
+        # Porovnáme decoded_userid s first_userid
         if decoded_userid[0] == first_userid:
-            result = {"match": True}
+            match_result = True
         else:
-            result = {"match": False}
+            match_result = False
+
+        # Kombinovaná odpoveď obsahujúca aj predikcie aj match
+        result = {
+            "match": match_result,
+            "predictions": decoded_userid.tolist()
+        }
 
         # Vrátenie výsledku ako JSON
         return JSONResponse(content=result)
