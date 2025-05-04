@@ -28,7 +28,7 @@ def calculate_tms(x1, y1, x2, y2, time1, time2):
     else:
         return np.nan
 
-def process_files(touch_df, accelerometer_df, gyroscope_df):
+def process_files(touch_df, accelerometer_df, gyroscope_df, first_userid):
     touch_df = touch_df.drop(columns=["event_type_detail", "pointer_id", "raw_x", "raw_y", "touch_major", "touch_minor"], errors='ignore')
     touch_df = touch_df.rename(columns={
         "event_type": "touch_event_type",
@@ -123,8 +123,8 @@ def process_files(touch_df, accelerometer_df, gyroscope_df):
 
     processed_df = pd.DataFrame(processed_data)
 
-    #if not processed_df.empty:
-    #    processed_df['userid'] = processed_df['userid'].fillna('1')
+    if not processed_df.empty:
+        processed_df['userid'] = processed_df['userid'].fillna(first_userid)
 
     return processed_df
 
@@ -236,6 +236,13 @@ async def process_data(
         accelerometer_df = pd.read_csv(BytesIO(await accelerometer.read()))
         gyroscope_df = pd.read_csv(BytesIO(await gyroscope.read()))
 
+        if 'userid' in touch_df.columns and not touch_df['userid'].isnull().all():
+            first_userid = touch_df['userid'].dropna().iloc[0]
+            print("Získaný userid:", first_userid)
+        else:
+            first_userid = None
+            print("Stĺpec 'userid' neexistuje alebo je prázdny.")
+
         # Debugging: Print the dataframes
         print("Touch DataFrame:")
         print(touch_df.head())
@@ -245,7 +252,7 @@ async def process_data(
         print(gyroscope_df.head())
 
         # Predspracovanie dát
-        processed_df = process_files(touch_df, accelerometer_df, gyroscope_df)
+        processed_df = process_files(touch_df, accelerometer_df, gyroscope_df, first_userid)
         print("Processed DataFrame:")
         print(processed_df.head())
 
