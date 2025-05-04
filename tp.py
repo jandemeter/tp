@@ -10,8 +10,7 @@ import math
 app = FastAPI()
 
 # Načítanie modelu
-loaded_data = joblib.load('multiclass_model.pkl')
-model = loaded_data['model']
+model = joblib.load('multiclass_model.pkl')
 
 def calculate_angle(diff_x, diff_y):
     angle_radians = math.atan2(diff_x, diff_y)
