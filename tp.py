@@ -123,8 +123,8 @@ def process_files(touch_df, accelerometer_df, gyroscope_df):
 
     processed_df = pd.DataFrame(processed_data)
 
-    if not processed_df.empty:
-        processed_df['userid'] = processed_df['userid'].fillna('1')
+    #if not processed_df.empty:
+    #    processed_df['userid'] = processed_df['userid'].fillna('1')
 
     return processed_df
 
