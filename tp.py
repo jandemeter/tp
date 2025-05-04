@@ -10,7 +10,7 @@ import math
 app = FastAPI()
 
 # Načítanie modelu
-loaded_data = joblib.load('optimized_xgb_model.pkl')
+loaded_data = joblib.load('multiclass_model.pkl')
 model = loaded_data['model']
 
 def calculate_angle(diff_x, diff_y):
