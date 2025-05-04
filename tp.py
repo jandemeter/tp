@@ -289,7 +289,15 @@ async def process_data(
 
         # Return ako JSON
         #return JSONResponse(content=final_features_df.to_dict(orient="records"))
-        return JSONResponse(content={"predictions": decoded_userid.tolist()})
+
+        # Porovnáme decoded_userid s first_userid
+        if decoded_userid[0] == first_userid:
+            result = {"match": True}
+        else:
+            result = {"match": False}
+
+        # Vrátenie výsledku ako JSON
+        return JSONResponse(content=result)
     
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
