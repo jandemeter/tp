@@ -11,7 +11,7 @@ app = FastAPI()
 
 # Načítanie modelu
 model = joblib.load('multiclass_model.pkl')
-label_encoder = joblib.load('label_encoder.pkl') 
+# label_encoder = joblib.load('label_encoder.pkl') 
 
 def calculate_angle(diff_x, diff_y):
     angle_radians = math.atan2(diff_x, diff_y)
@@ -289,18 +289,6 @@ async def process_data(
         touch_df = pd.read_csv(BytesIO(await touch.read()))
         accelerometer_df = pd.read_csv(BytesIO(await accelerometer.read()))
         gyroscope_df = pd.read_csv(BytesIO(await gyroscope.read()))
-        # touch_df = pd.read_csv("touch.csv")
-        # accelerometer_df = pd.read_csv("accelerometer.csv")
-        # gyroscope_df = pd.read_csv("gyroscope.csv")
-
-        # Načítanie z pripraveného merged súboru
-        # merged_df = pd.read_csv("merged_output.csv")
-
-        # Kontrola userid
-        # if 'userid' in merged_df.columns and not merged_df['userid'].isnull().all():
-        #     first_userid = merged_df['userid'].dropna().iloc[0]
-        # else:
-        #     first_userid = None
 
         if 'userid' in touch_df.columns and not touch_df['userid'].isnull().all():
             first_userid = touch_df['userid'].dropna().iloc[0]
@@ -320,17 +308,6 @@ async def process_data(
         merged_df = merge_files(touch_df, accelerometer_df, gyroscope_df)
         processed_df = process_files(merged_df, first_userid)
         final_features_df = create_features(processed_df)
-
-        # Ošetrenie chýbajúcich alebo nekonečných hodnôt
-        # final_features_df = final_features_df.replace([np.inf, -np.inf], np.nan).fillna(0)
-
-        # Uloženie výsledku
-        # merged_df.to_csv("merged_3_files.csv", index=False)
-        # final_features_df.to_csv("preprocessed.csv", index=False)
-        # print("Preprocessing hotový. Dáta uložené v preprocessed.csv")
-
-    # except Exception as e:
-    #     print(f"Nastala chyba: {e}")
 
         print("Processed DataFrame:")
         print(processed_df.head())
@@ -356,30 +333,25 @@ async def process_data(
         # Predikcia
         predictions = model.predict(features)
 
-        decoded_userid = label_encoder.inverse_transform(predictions)
+        # decoded_userid = label_encoder.inverse_transform(predictions)
 
 
         # Pridanie predikcií do výsledného datasetu
         final_features_df['prediction'] = predictions
 
-        # ===>>> PRIDÁŠ TOTO tu: <<===
         final_features_df = final_features_df.replace([np.inf, -np.inf], np.nan)
         final_features_df = final_features_df.fillna(0)
 
-        # Return ako JSON
-        #return JSONResponse(content=final_features_df.to_dict(orient="records"))
-
         # Porovnáme decoded_userid s first_userid
-        # Porovnáme decoded_userid s first_userid
-        if decoded_userid[0] == first_userid:
-            match_result = True
-        else:
-            match_result = False
+        # if decoded_userid[0] == first_userid:
+        #     match_result = True
+        # else:
+        match_result = False
 
         # Kombinovaná odpoveď obsahujúca aj predikcie aj match
         result = {
             "match": match_result,
-            "predictions": decoded_userid.tolist()
+            "predictions": int(predictions[0])
         }
 
         # Vrátenie výsledku ako JSON
