@@ -351,7 +351,7 @@ async def process_data(
         # Kombinovaná odpoveď obsahujúca aj predikcie aj match
         result = {
             "match": match_result,
-            "predictions": int(predictions[0])
+            "predictions": int(predictions[-1])
         }
 
         # Vrátenie výsledku ako JSON
