@@ -29,59 +29,74 @@ def calculate_tms(x1, y1, x2, y2, time1, time2):
         return np.nan
 
 def merge_files(touch_df, accelerometer_df, gyroscope_df):
-    touch_df = touch_df.drop(columns=["event_type_detail", "pointer_id", "raw_x", "raw_y", "touch_major", "touch_minor"], errors='ignore')
-    touch_df = touch_df.rename(columns={
-        "event_type": "touch_event_type",
-        "x": "touch_x",
-        "y": "touch_y",
-        "pressure": "touch_pressure",
-        "size": "touch_size"
-    })
+    for df in [touch_df, accelerometer_df, gyroscope_df]:
+        df['timestamp'] = pd.to_numeric(df['timestamp'], errors='coerce') // 1_000_000
+        df.dropna(subset=['timestamp'], inplace=True)
+        df['vzor_id'] = df['vzor_id'].astype(str)
+        df.sort_values('timestamp', inplace=True)
 
-    for col in ["userid", "vzor_id", "orientation"]:
-        if col not in touch_df.columns:
-            touch_df[col] = None 
+    touch_df = touch_df.copy()
+    touch_df['touch_event_type'] = touch_df['event_type'] 
+    cols_to_drop = [
+        'input_x', 'input_y', 'input', 
+        'event_type', 'event_type_detail',
+        'session_id_x', 'session_id_y', 'session_id',
+        'userid_x', 'userid_y'
+    ]
+    touch_df.drop(columns=[col for col in cols_to_drop if col in touch_df.columns], inplace=True)
 
-    accelerometer_df = accelerometer_df.rename(columns={
-        "x": "accelerometer_x", 
-        "y": "accelerometer_y", 
-        "z": "accelerometer_z"
-    })
+    touch_df.rename(columns={
+        'x': 'touch_x',
+        'y': 'touch_y',
+        'pressure': 'touch_pressure',
+        'size': 'touch_size',
+    }, inplace=True)
 
-    gyroscope_df = gyroscope_df.rename(columns={
-        "x": "gyroscope_x", 
-        "y": "gyroscope_y", 
-        "z": "gyroscope_z"
-    })
+    accelerometer_df.rename(columns={
+        'x': 'accelerometer_x',
+        'y': 'accelerometer_y',
+        'z': 'accelerometer_z'
+    }, inplace=True)
 
-    merged_df = touch_df.merge(
-        accelerometer_df[["timestamp", "vzor_id", "accelerometer_x", "accelerometer_y", "accelerometer_z"]],
-        on=["timestamp", "vzor_id"], how="left"
+    gyroscope_df.rename(columns={
+        'x': 'gyroscope_x',
+        'y': 'gyroscope_y',
+        'z': 'gyroscope_z'
+    }, inplace=True)
+
+    merged_df = pd.merge_asof(
+        touch_df, accelerometer_df, on='timestamp', by='vzor_id',
+        direction='backward', tolerance=50
     )
-    merged_df = merged_df.merge(
-        gyroscope_df[["timestamp", "vzor_id", "gyroscope_x", "gyroscope_y", "gyroscope_z"]],
-        on=["timestamp", "vzor_id"], how="left"
+
+    merged_df = pd.merge_asof(
+        merged_df, gyroscope_df, on='timestamp', by='vzor_id',
+        direction='backward', tolerance=50
     )
 
-    column_order = [
-        "userid", "vzor_id", "timestamp", "orientation",
-        "touch_event_type", "touch_x", "touch_y", "touch_pressure", "touch_size",
-        "accelerometer_x", "accelerometer_y", "accelerometer_z",
-        "gyroscope_x", "gyroscope_y", "gyroscope_z"
+    final_columns = [
+        'userid', 'vzor_id', 'timestamp', 'orientation',
+        'touch_event_type', 'touch_x', 'touch_y', 'touch_pressure', 'touch_size',
+        'accelerometer_x', 'accelerometer_y', 'accelerometer_z',
+        'gyroscope_x', 'gyroscope_y', 'gyroscope_z'
     ]
 
-    for col in column_order:
+    if 'x' not in merged_df.columns and 'raw_x' in merged_df.columns:
+        merged_df.rename(columns={'raw_x': 'x', 'raw_y': 'y'}, inplace=True)
+
+    for col in final_columns:
         if col not in merged_df.columns:
             merged_df[col] = None
 
-    merged_df = merged_df[column_order]
+    merged_df = merged_df[final_columns]
 
     return merged_df
 
-processed_data = []
-current_touch = None
 
 def process_files(df, first_userid):
+    processed_data = []
+    current_touch = None
+
 # priprava na predspracovanie (vypocet angle, direction, TMS)
     for _, row in df.iterrows():
         if row['touch_event_type'] == 'down':
