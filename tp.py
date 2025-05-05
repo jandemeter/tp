@@ -292,71 +292,38 @@ async def process_data(
 
         if 'userid' in touch_df.columns and not touch_df['userid'].isnull().all():
             first_userid = touch_df['userid'].dropna().iloc[0]
-            print("Získaný userid:", first_userid)
         else:
             first_userid = None
-            print("Stĺpec 'userid' neexistuje alebo je prázdny.")
-
-        # Debugging: Print the dataframes
-        print("Touch DataFrame:")
-        print(touch_df.head())
-        print("Accelerometer DataFrame:")
-        print(accelerometer_df.head())
-        print("Gyroscope DataFrame:")
-        print(gyroscope_df.head())
 
         merged_df = merge_files(touch_df, accelerometer_df, gyroscope_df)
         processed_df = process_files(merged_df, first_userid)
         final_features_df = create_features(processed_df)
 
-        print("Processed DataFrame:")
-        print(processed_df.head())
-
-        final_features_df = create_features(processed_df)
-        print("Final Features DataFrame:")
-        print(final_features_df.head())
-
-        # Check if the DataFrame is empty
         if final_features_df.empty:
             raise ValueError("The features DataFrame is empty!")
 
-       # Remove the columns `userid` and `timestamp`
-        print("Columns in final_features_df:", final_features_df.columns)
         features = final_features_df.drop(columns=['userid', 'timestamp'], errors='ignore')
-
-        # Debugging: Print the shape of the features DataFrame
-        print("Features DataFrame shape:", features.shape)
 
         if features.empty:
             raise ValueError("The features DataFrame is empty after dropping 'userid' and 'timestamp'!")
 
-        # Predikcia
         predictions = model.predict(features)
 
-        # decoded_userid = label_encoder.inverse_transform(predictions)
-
-
-        # Pridanie predikcií do výsledného datasetu
         final_features_df['prediction'] = predictions
-
         final_features_df = final_features_df.replace([np.inf, -np.inf], np.nan)
         final_features_df = final_features_df.fillna(0)
 
-        # Porovnáme decoded_userid s first_userid
-        # if decoded_userid[0] == first_userid:
-        #     match_result = True
-        # else:
         match_result = False
 
-        # Kombinovaná odpoveď obsahujúca aj predikcie aj match
         result = {
             "match": match_result,
             "predictions": int(predictions[-1])
         }
 
-        # Vrátenie výsledku ako JSON
+        # VÝPIS PREDIKCIE DO LOGU
+        print("Prediction result:", result)
+
         return JSONResponse(content=result)
-    
+
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
-
