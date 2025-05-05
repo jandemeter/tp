@@ -321,6 +321,7 @@ async def process_data(
         }
 
         # VÝPIS PREDIKCIE DO LOGU
+        print("Predictions:", predictions.tolist())
         print("Prediction result:", result)
 
         return JSONResponse(content=result)
