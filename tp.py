@@ -10,8 +10,8 @@ import math
 app = FastAPI()
 
 # Načítanie modelu
-model = joblib.load('multiclass_model_AD.pkl')
-# label_encoder = joblib.load('label_encoder.pkl') 
+model = joblib.load('multiclass_model.pkl')
+label_encoder = joblib.load('label_encoder.pkl') 
 
 def calculate_angle(diff_x, diff_y):
     angle_radians = math.atan2(diff_x, diff_y)
@@ -324,16 +324,27 @@ async def process_data(
 
         predictions = model.predict(features)
 
+        decoded_userid = label_encoder.inverse_transform(predictions)
+
         final_features_df['prediction'] = predictions
         final_features_df = final_features_df.replace([np.inf, -np.inf], np.nan)
         final_features_df = final_features_df.fillna(0)
 
-        match_result = False
 
+        # Porovnáme decoded_userid s first_userid
+        if decoded_userid[0] == first_userid:
+            match_result = True
+        else:
+            match_result = False
+
+        # Kombinovaná odpoveď obsahujúca aj predikcie aj match
         result = {
             "match": match_result,
-            "predictions": int(predictions[-1])
+            "predictions": decoded_userid.tolist()
         }
+
+        # Vrátenie výsledku ako JSON
+        return JSONResponse(content=result)
 
         # VÝPIS PREDIKCIE DO LOGU
         print("Predictions:", predictions.tolist())
